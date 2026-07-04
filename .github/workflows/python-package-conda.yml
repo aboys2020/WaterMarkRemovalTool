@@ -1,4 +1,4 @@
-name: Build Windows EXE (Python)
+name: Build Windows EXE (Conda)
 
 on:
   push:
@@ -12,32 +12,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. 设置 Python 环境 (而不是 Go)
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: '3.10' # 这里填写你本地开发用的 Python 版本，比如 3.8, 3.9, 3.10
+          auto-update-conda: true
+          python-version: "3.9" # 与 README 要求的 3.9+ 保持一致
 
-      # 2. 安装依赖
-      - name: Install dependencies
+      - name: Create Conda Environment
         run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          # 如果你的仓库里有 requirements.txt，请取消下面这行的注释
-          # pip install -r requirements.txt
+          # 1. 安装 README 中列出的核心依赖 (部分库在 conda 中名称不同)
+          conda install -c conda-forge pyqt=5 pikepdf pymupdf opencv pillow numpy scikit-image poppler -y
           
-          # 如果没有 requirements.txt，你需要在这里手动列出你的项目用到的库
-          # 例如：pip install opencv-python numpy tkinter (根据实际情况填写)
+          # 2. 安装 pip-only 的库
+          pip install PyPDF2 pdf2image python-docx
 
-      # 3. 使用 PyInstaller 打包成 exe
+      - name: Install PyInstaller
+        run: |
+          pip install pyinstaller
+
       - name: Build EXE with PyInstaller
         run: |
-          # 请将 main.py 替换为你项目的启动文件名
-          pyinstaller --onefile main.py 
+          # 根据 README，prod.py 是主图形界面入口
+          pyinstaller --onefile --windowed prod.py
 
-      # 4. 上传生成的 exe 文件
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WaterMarkRemovalTool-Windows
-          path: dist/*.exe
+          path: dist/prod.exe
