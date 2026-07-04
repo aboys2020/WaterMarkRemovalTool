@@ -1,27 +1,43 @@
-name: Build Windows EXE
+name: Build Windows EXE (Python)
+
 on:
   push:
-    branches: [main]  # 仅当推送到 main 分支时触发
+    branches: [ main ]
 
 jobs:
   build:
-    runs-on: windows-latest  # 关键：指定 Windows 环境
+    runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      # 1. 设置 Python 环境 (而不是 Go)
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          go-version: "1.22"  # 按需修改 Go 版本
+          python-version: '3.10' # 这里填写你本地开发用的 Python 版本，比如 3.8, 3.9, 3.10
 
-      - name: Build EXE
+      # 2. 安装依赖
+      - name: Install dependencies
         run: |
-          go build -o myapp.exe .  # 生成当前目录的 myapp.exe
-          ls -l myapp.exe          # 验证文件是否存在
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          # 如果你的仓库里有 requirements.txt，请取消下面这行的注释
+          # pip install -r requirements.txt
+          
+          # 如果没有 requirements.txt，你需要在这里手动列出你的项目用到的库
+          # 例如：pip install opencv-python numpy tkinter (根据实际情况填写)
 
-      - name: Upload EXE
-        uses: actions/upload-artifact@v3
+      # 3. 使用 PyInstaller 打包成 exe
+      - name: Build EXE with PyInstaller
+        run: |
+          # 请将 main.py 替换为你项目的启动文件名
+          pyinstaller --onefile main.py 
+
+      # 4. 上传生成的 exe 文件
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: windows-exe
-          path: myapp.exe  # 上传生成的 EXE 文件
+          name: WaterMarkRemovalTool-Windows
+          path: dist/*.exe
