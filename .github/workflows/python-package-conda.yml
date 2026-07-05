@@ -3,33 +3,34 @@ name: Build Windows EXE (Conda)
 on:
   push:
     branches: [ main ]
+  workflow_dispatch: # 允许手动触发构建
 
 jobs:
   build:
     runs-on: windows-latest
-    # 设置合理的超时时间，防止任务挂起过久
-    timeout-minutes: 30 
+    timeout-minutes: 30 # 设置30分钟超时，防止无限挂起
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 1. 配置 Node.js 版本，消除 "Node.js 20 is deprecated" 警告
+    # 1. 设置 Node.js (消除弃用警告)
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
+    # 2. 设置 Miniconda 环境
     - name: Set up Miniconda
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
         python-version: "3.9"
-        # 显式指定 conda-forge 通道，避免 defaults 警告
-        channels: conda-forge
+        activate-environment: myenv # 激活名为 myenv 的环境
+        channels: conda-forge, defaults
         channel-priority: strict
 
-    # 2. 缓存 Conda 包，极大提升后续构建速度，解决超时问题
+    # 3. 缓存 Conda 包 (加速构建)
     - name: Cache conda packages
       uses: actions/cache@v3
       with:
@@ -38,28 +39,37 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-conda-
 
-    - name: Create Conda Environment
+    # 4. 安装核心依赖 (关键步骤：显式安装 PyQt5)
+    - name: Install Dependencies
+      shell: bash -l {0}
       run: |
-        # 3. 使用国内镜像源加速下载 (可选，若网络不稳定时启用)
-        conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main/
-        conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
+        echo "Installing core dependencies..."
+        # 优先从 conda-forge 安装 PyQt5，这比 pip 更稳定且包含必要的 DLL
+        conda install -c conda-forge pyqt=5.15.* -y
         
-        # 安装核心依赖
-        conda install pyqt=5 pikepdf pymupdf opencv pillow numpy scikit-image poppler -y
+        # 如果你还有其他依赖（如 pandas, numpy），建议在这里一起安装
+        # conda install numpy pandas -y
         
-        # 安装 pip-only 的库
-        pip install PyPDF2 pdf2image python-docx
-
-    - name: Install PyInstaller
-      run: |
+        # 如果某些库 conda 找不到，再用 pip 补充
         pip install pyinstaller
 
-    - name: Build EXE with PyInstaller
+    # 5. 验证环境 (调试用，确保 PyQt5 真的装上了)
+    - name: Verify Environment
+      shell: bash -l {0}
       run: |
-        pyinstaller --onefile --windowed prod.py
+        python -c "import PyQt5; print('PyQt5 version:', PyQt5.__version__)"
 
+    # 6. 打包 EXE
+    - name: Build EXE with PyInstaller
+      shell: bash -l {0}
+      run: |
+        # --hidden-import 强制包含模块，防止动态导入失败
+        # --noconsole 隐藏黑色命令行窗口（如果是 GUI 程序）
+        pyinstaller --onefile --noconsole --hidden-import=PyQt5 prod.py
+
+    # 7. 上传产物
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: WaterMarkRemovalTool-Windows
-        path: dist/prod.exe
+        name: windows-exe-build
+        path: dist/prod.exe # 确保这里指向生成的 exe 文件名
