@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30 
+    timeout-minutes: 30
 
     steps:
     - name: Checkout code
@@ -24,43 +24,39 @@ jobs:
       with:
         auto-update-conda: true
         python-version: "3.9"
-        activate-environment: myenv 
+        activate-environment: myenv
         channels: conda-forge, defaults
-        channel-priority: strict
 
-    - name: Cache conda packages
-      uses: actions/cache@v3
-      with:
-        path: ~/conda_pkgs_dir
-        key: ${{ runner.os }}-conda-${{ hashFiles('**/environment.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-conda-
-
-    # --- 核心修改区域开始 ---
-    
-    # 1. 安装依赖：使用 pip 安装 PyQt5 往往比 conda 对 PyInstaller 更友好
     - name: Install Dependencies
       shell: bash -l {0}
       run: |
-        conda install -c conda-forge pyqt=5 -y
-        pip install pyinstaller pikepdf pymupdf
-        
-    # 2. 简单验证：只检查能不能导入，不查版本号，防止报错中断
+        # 强制更新环境，确保安装最新的 PyQt5
+        conda install -y pyqt=5 pikepdf pymupdf requests tqdm
+        pip install pyinstaller
+
     - name: Verify Environment
       shell: bash -l {0}
       run: |
-        python -c "import PyQt5; print('PyQt5 loaded successfully')"
-        
-    # 3. 打包：增加 --hidden-import 确保所有组件都被抓取
-    - name: Build EXE with PyInstaller
+        python -c "import PyQt5; print('PyQt5 found:', PyQt5.__file__)"
+
+    - name: Build with PyInstaller (Folder Mode)
       shell: bash -l {0}
       run: |
-        pyinstaller --onefile --windowed --hidden-import=PyQt5 --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtGui prod.py
+        # 关键修改：使用 --onedir 而不是 --onefile
+        # PyQt5 在单文件模式下极易丢失插件，文件夹模式最稳定
+        pyinstaller --name prod --windowed --clean prod.py
 
-    # --- 核心修改区域结束 ---
+    - name: Compress to Single EXE (Optional)
+      shell: bash -l {0}
+      run: |
+        # 如果你非要一个单独的 exe 文件，可以用 7z 把整个文件夹压成一个自解压包
+        # 但建议先测试 dist/prod/prod.exe 是否能运行
+        echo "Build finished. Check dist/prod/ folder."
+        ls dist/prod/
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: windows-build
-        path: dist/prod.exe
+        name: Windows-Build
+        # 上传整个文件夹，因为 PyQt5 需要旁边的 dll 和 plugins 文件夹
+        path: dist/prod/
