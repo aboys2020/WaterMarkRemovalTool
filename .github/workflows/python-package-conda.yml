@@ -1,4 +1,4 @@
-name: Build Windows EXE (Conda)
+name: Build Windows EXE (Fixed)
 
 on:
   push:
@@ -14,57 +14,65 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Node.js (如果不需要可删除此步)
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
     - name: Set up Miniconda
       uses: conda-incubator/setup-miniconda@v3
       with:
-        auto-update-conda: true
-        python-version: "3.9" 
+        auto-update-conda: true 
+        python-version: "3.9"
         activate-environment: myenv
-        channels: conda-forge, defaults # 关键：优先使用 conda-forge
+        channels: conda-forge, defaults 
 
-    - name: Install Dependencies (关键修改)
+    - name: Fix Environment & Install Dependencies
       shell: bash -l {0}
       run: |
-        # 1. 先升级 pip，防止旧版 pip 安装失败
+        # 1. 确保环境里有 pip (防止刚才的报错)
+        conda install -n myenv pip -y
+        
+        # 2. 激活环境
+        conda activate myenv
+        
+        # 3. 升级 pip (防止旧版 pip 安装失败)
         python -m pip install --upgrade pip
         
-        # 2. 使用 conda 安装 PyQt5 并指定版本 (5.15.7 是最稳的版本之一)
-        # 加上 -y 自动确认
-        conda install -c conda-forge pyqt=5.15.7 -y
+        # 4. 安装核心库 (指定版本防止冲突)
+        # PyQt5 指定 5.15.x 是最稳的
+        pip install PyQt5==5.15.9 pyinstaller
         
-        # 3. 安装 PyInstaller
-        pip install pyinstaller
-        
-        # 4. 如果你有 requirements.txt，在这里安装其他包
-        # pip install -r requirements.txt
+        # 5. 安装你项目其他的依赖 (如果有的话)
+        # pip install -r requirements.txt 
 
     - name: Verify Environment (验证环境)
       shell: bash -l {0}
       run: |
-        echo "Checking Python..."
-        python --version
-        echo "Checking PyQt5..."
-        python -c "from PyQt5 import QtWidgets; print('PyQt5 OK')"
+        conda activate myenv
+        echo "--- Python Path ---"
+        where python
+        echo "--- Pip List ---"
+        pip list | grep -i pyqt
+        pip list | grep -i installer
 
     - name: Build with PyInstaller (文件夹模式)
       shell: bash -l {0}
       run: |
-        # 使用 --onedir 模式打包，这对 PyQt5 最稳定
-        # --name prod 指定生成的文件夹名字
-        pyinstaller --onedir --name prod --clean prod.py
+        conda activate myenv
+        
+        # 关键：使用 --hidden-import 强制包含 PyQt5 模块
+        # 先打成文件夹模式 (--onedir)，这样不容易丢 DLL
+        pyinstaller --noconfirm --onedir --windowed \
+          --name "MyApp" \
+          --hidden-import=PyQt5 \
+          --hidden-import=PyQt5.QtCore \
+          --hidden-import=PyQt5.QtGui \
+          --hidden-import=PyQt5.QtWidgets \
+          prod.py
 
     - name: Zip the Artifact (压缩成单个文件方便下载)
       run: |
-        # 将生成的 dist/prod 文件夹压缩成 zip
-        Compress-Archive -Path dist/prod/* -DestinationPath prod_build.zip
+        # 将生成的文件夹压缩，因为单文件模式经常缺 Qt 插件
+        Compress-Archive -Path dist\MyApp\* -DestinationPath MyApp_Portable.zip
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Windows-EXE-Build
-        path: prod_build.zip
+        name: Windows-Build
+        path: MyApp_Portable.zip
