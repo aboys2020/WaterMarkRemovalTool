@@ -14,7 +14,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Node.js
+    - name: Setup Node.js (如果不需要可删除此步)
       uses: actions/setup-node@v4
       with:
         node-version: '20'
@@ -23,40 +23,48 @@ jobs:
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
-        python-version: "3.9"
+        python-version: "3.9" 
         activate-environment: myenv
-        channels: conda-forge, defaults
+        channels: conda-forge, defaults # 关键：优先使用 conda-forge
 
-    - name: Install Dependencies
+    - name: Install Dependencies (关键修改)
       shell: bash -l {0}
       run: |
-        # 强制更新环境，确保安装最新的 PyQt5
-        conda install -y pyqt=5 pikepdf pymupdf requests tqdm
+        # 1. 先升级 pip，防止旧版 pip 安装失败
+        python -m pip install --upgrade pip
+        
+        # 2. 使用 conda 安装 PyQt5 并指定版本 (5.15.7 是最稳的版本之一)
+        # 加上 -y 自动确认
+        conda install -c conda-forge pyqt=5.15.7 -y
+        
+        # 3. 安装 PyInstaller
         pip install pyinstaller
+        
+        # 4. 如果你有 requirements.txt，在这里安装其他包
+        # pip install -r requirements.txt
 
-    - name: Verify Environment
+    - name: Verify Environment (验证环境)
       shell: bash -l {0}
       run: |
-        python -c "import PyQt5; print('PyQt5 found:', PyQt5.__file__)"
+        echo "Checking Python..."
+        python --version
+        echo "Checking PyQt5..."
+        python -c "from PyQt5 import QtWidgets; print('PyQt5 OK')"
 
-    - name: Build with PyInstaller (Folder Mode)
+    - name: Build with PyInstaller (文件夹模式)
       shell: bash -l {0}
       run: |
-        # 关键修改：使用 --onedir 而不是 --onefile
-        # PyQt5 在单文件模式下极易丢失插件，文件夹模式最稳定
-        pyinstaller --name prod --windowed --clean prod.py
+        # 使用 --onedir 模式打包，这对 PyQt5 最稳定
+        # --name prod 指定生成的文件夹名字
+        pyinstaller --onedir --name prod --clean prod.py
 
-    - name: Compress to Single EXE (Optional)
-      shell: bash -l {0}
+    - name: Zip the Artifact (压缩成单个文件方便下载)
       run: |
-        # 如果你非要一个单独的 exe 文件，可以用 7z 把整个文件夹压成一个自解压包
-        # 但建议先测试 dist/prod/prod.exe 是否能运行
-        echo "Build finished. Check dist/prod/ folder."
-        ls dist/prod/
+        # 将生成的 dist/prod 文件夹压缩成 zip
+        Compress-Archive -Path dist/prod/* -DestinationPath prod_build.zip
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Windows-Build
-        # 上传整个文件夹，因为 PyQt5 需要旁边的 dll 和 plugins 文件夹
-        path: dist/prod/
+        name: Windows-EXE-Build
+        path: prod_build.zip
