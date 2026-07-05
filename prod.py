@@ -1,4 +1,21 @@
 import os
+import sys
+
+# --- 修复打包后找不到 PyQt5 的问题 ---
+if getattr(sys, 'frozen', False):
+    # 获取 exe 所在的目录
+    base_path = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(sys.executable)
+    
+    # 尝试设置 Qt 插件路径 (PyQt5 常见结构)
+    qt_plugin_path = os.path.join(base_path, 'PyQt5', 'Qt5', 'plugins')
+    if os.path.exists(qt_plugin_path):
+        os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = qt_plugin_path
+        
+    # 同时也把基础目录加入系统路径，防止找不到其他依赖
+    if base_path not in sys.path:
+        sys.path.insert(0, base_path)
+# ----------------------------------
+import os
 import threading
 import time
 from functools import partial
