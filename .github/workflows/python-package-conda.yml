@@ -3,34 +3,31 @@ name: Build Windows EXE (Conda)
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # 允许手动触发构建
+  workflow_dispatch: # 允许手动点击运行
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 30 # 设置30分钟超时，防止无限挂起
+    timeout-minutes: 30 
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 1. 设置 Node.js (消除弃用警告)
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
-    # 2. 设置 Miniconda 环境
     - name: Set up Miniconda
       uses: conda-incubator/setup-miniconda@v3
       with:
         auto-update-conda: true
         python-version: "3.9"
-        activate-environment: myenv # 激活名为 myenv 的环境
+        activate-environment: myenv 
         channels: conda-forge, defaults
         channel-priority: strict
 
-    # 3. 缓存 Conda 包 (加速构建)
     - name: Cache conda packages
       uses: actions/cache@v3
       with:
@@ -39,37 +36,31 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-conda-
 
-    # 4. 安装核心依赖 (关键步骤：显式安装 PyQt5)
+    # --- 核心修改区域开始 ---
+    
+    # 1. 安装依赖：使用 pip 安装 PyQt5 往往比 conda 对 PyInstaller 更友好
     - name: Install Dependencies
       shell: bash -l {0}
       run: |
-        echo "Installing core dependencies..."
-        # 优先从 conda-forge 安装 PyQt5，这比 pip 更稳定且包含必要的 DLL
-        conda install -c conda-forge pyqt=5.15.* -y
+        conda install -c conda-forge pyqt=5 -y
+        pip install pyinstaller pikepdf pymupdf
         
-        # 如果你还有其他依赖（如 pandas, numpy），建议在这里一起安装
-        # conda install numpy pandas -y
-        
-        # 如果某些库 conda 找不到，再用 pip 补充
-        pip install pyinstaller
-
-    # 5. 验证环境 (调试用，确保 PyQt5 真的装上了)
+    # 2. 简单验证：只检查能不能导入，不查版本号，防止报错中断
     - name: Verify Environment
       shell: bash -l {0}
       run: |
-        python -c "import PyQt5; print('PyQt5 version:', PyQt5.__version__)"
-
-    # 6. 打包 EXE
+        python -c "import PyQt5; print('PyQt5 loaded successfully')"
+        
+    # 3. 打包：增加 --hidden-import 确保所有组件都被抓取
     - name: Build EXE with PyInstaller
       shell: bash -l {0}
       run: |
-        # --hidden-import 强制包含模块，防止动态导入失败
-        # --noconsole 隐藏黑色命令行窗口（如果是 GUI 程序）
-        pyinstaller --onefile --noconsole --hidden-import=PyQt5 prod.py
+        pyinstaller --onefile --windowed --hidden-import=PyQt5 --hidden-import=PyQt5.QtCore --hidden-import=PyQt5.QtGui prod.py
 
-    # 7. 上传产物
+    # --- 核心修改区域结束 ---
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: windows-exe-build
-        path: dist/prod.exe # 确保这里指向生成的 exe 文件名
+        name: windows-build
+        path: dist/prod.exe
