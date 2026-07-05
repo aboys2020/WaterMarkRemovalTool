@@ -1,4 +1,4 @@
-name: Build Windows EXE (Final Fix)
+name: Build and Release Windows EXE
 
 on:
   push:
@@ -32,35 +32,40 @@ jobs:
         # 2. 安装核心依赖 (指定版本以防冲突)
         pip install pyinstaller PyQt5==5.15.9 python-docx
         
-        # 3. 如果有 requirements.txt，也可以取消下面这行的注释来安装其他库
-        pip install -r requirements.txt
+        # 如果有其他依赖，请在 requirements.txt 中管理并取消下面注释
+        # pip install -r requirements.txt
 
     - name: Verify Environment
       shell: bash -l {0}
       run: |
-        echo "--- Python Version ---"
-        python --version
-        echo "--- Pip List ---"
+        echo "Python Path:"
+        which python
+        echo "Pip List:"
         pip list
-        echo "--- Check docx ---"
-        python -c "import docx; print('docx OK')"
-        echo "--- Check PyQt5 ---"
-        python -c "from PyQt5 import QtWidgets; print('PyQt5 OK')"
 
     - name: Build with PyInstaller
       shell: bash -l {0}
       run: |
-        # 关键修复：使用 --hidden-import 强制包含 docx 和可能漏掉的模块
-        # --noconsole: 打包后不显示黑色命令行窗口 (如果是控制台程序请去掉此参数)
-        # --onefile: 打包成单个 exe 文件
+        # 核心修改：使用 --hidden-import 强制包含 docx 和你的自定义模块
+        # 如果你的主程序入口不是 prod.py，请替换成正确的文件名
         pyinstaller --onefile --noconsole \
           --hidden-import=docx \
-          --hidden-import=docx.opc \
           --hidden-import=pymod02_importers \
           prod.py
 
-    - name: Upload Artifact
+    - name: Upload Artifact (For Testing)
       uses: actions/upload-artifact@v4
       with:
-        name: MyApp_Portable
+        name: MyApp_Portable_Debug
         path: dist/prod.exe
+
+    - name: Create Release
+      if: github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: Build ${{ github.run_number }}
+        files: dist/prod.exe
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
