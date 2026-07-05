@@ -1,4 +1,4 @@
-name: Build Windows EXE (Fixed)
+name: Build Windows EXE (Final Fix)
 
 on:
   push:
@@ -17,62 +17,50 @@ jobs:
     - name: Set up Miniconda
       uses: conda-incubator/setup-miniconda@v3
       with:
-        auto-update-conda: true 
+        auto-update-conda: true
         python-version: "3.9"
         activate-environment: myenv
-        channels: conda-forge, defaults 
+        channels: conda-forge, defaults
 
-    - name: Fix Environment & Install Dependencies
+    - name: Install Dependencies & Fix Pip
       shell: bash -l {0}
       run: |
-        # 1. 确保环境里有 pip (防止刚才的报错)
-        conda install -n myenv pip -y
-        
-        # 2. 激活环境
-        conda activate myenv
-        
-        # 3. 升级 pip (防止旧版 pip 安装失败)
+        # 1. 强制更新 pip，防止报错 No module named pip
+        python -m ensurepip --upgrade
         python -m pip install --upgrade pip
         
-        # 4. 安装核心库 (指定版本防止冲突)
-        # PyQt5 指定 5.15.x 是最稳的
-        pip install PyQt5==5.15.9 pyinstaller
+        # 2. 安装核心依赖 (指定版本以防冲突)
+        pip install pyinstaller PyQt5==5.15.9 python-docx
         
-        # 5. 安装你项目其他的依赖 (如果有的话)
-        # pip install -r requirements.txt 
+        # 3. 如果有 requirements.txt，也可以取消下面这行的注释来安装其他库
+        pip install -r requirements.txt
 
-    - name: Verify Environment (验证环境)
+    - name: Verify Environment
       shell: bash -l {0}
       run: |
-        conda activate myenv
-        echo "--- Python Path ---"
-        where python
+        echo "--- Python Version ---"
+        python --version
         echo "--- Pip List ---"
-        pip list | grep -i pyqt
-        pip list | grep -i installer
+        pip list
+        echo "--- Check docx ---"
+        python -c "import docx; print('docx OK')"
+        echo "--- Check PyQt5 ---"
+        python -c "from PyQt5 import QtWidgets; print('PyQt5 OK')"
 
-    - name: Build with PyInstaller (文件夹模式)
+    - name: Build with PyInstaller
       shell: bash -l {0}
       run: |
-        conda activate myenv
-        
-        # 关键：使用 --hidden-import 强制包含 PyQt5 模块
-        # 先打成文件夹模式 (--onedir)，这样不容易丢 DLL
-        pyinstaller --noconfirm --onedir --windowed \
-          --name "MyApp" \
-          --hidden-import=PyQt5 \
-          --hidden-import=PyQt5.QtCore \
-          --hidden-import=PyQt5.QtGui \
-          --hidden-import=PyQt5.QtWidgets \
+        # 关键修复：使用 --hidden-import 强制包含 docx 和可能漏掉的模块
+        # --noconsole: 打包后不显示黑色命令行窗口 (如果是控制台程序请去掉此参数)
+        # --onefile: 打包成单个 exe 文件
+        pyinstaller --onefile --noconsole \
+          --hidden-import=docx \
+          --hidden-import=docx.opc \
+          --hidden-import=pymod02_importers \
           prod.py
-
-    - name: Zip the Artifact (压缩成单个文件方便下载)
-      run: |
-        # 将生成的文件夹压缩，因为单文件模式经常缺 Qt 插件
-        Compress-Archive -Path dist\MyApp\* -DestinationPath MyApp_Portable.zip
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Windows-Build
-        path: MyApp_Portable.zip
+        name: MyApp_Portable
+        path: dist/prod.exe
